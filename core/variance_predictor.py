@@ -176,7 +176,7 @@ class PitchPredictor(torch.nn.Module):
         min=0,
         max=0,
         n_bins=256,
-        out=5,
+        out=10,
     ):
         """Initilize pitch predictor module.
 
@@ -297,7 +297,13 @@ class PitchPredictor(torch.nn.Module):
         return F.one_hot(quantize.long(), 256).float()
 
     def inverse(self, Wavelet_lf0, f0_mean, f0_std):
-        scales =  np.array([0.01, 0.02, 0.04, 0.08, 0.16])  #np.arange(1,11)
+        mother = wavelet.MexicanHat()
+        dt = 0.005
+        dj = 2
+        s0 = dt*2
+        J = out - 1
+        _, scales, _, _, _, _ = wavelet.cwt(np.ones([10]), dt, dj, s0, J, mother)
+        #scales =  np.array([0.01, 0.02, 0.04, 0.08, 0.16])  #np.arange(1,11)
         #print(Wavelet_lf0.shape)
         Wavelet_lf0 = Wavelet_lf0.squeeze(0).cpu().numpy()
         lf0_rec = np.zeros([Wavelet_lf0.shape[0], len(scales)])

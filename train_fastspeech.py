@@ -202,13 +202,12 @@ def train(args, hp, hp_str, logger, vocoder):
                     )
 
 
-                    audio = generate_audio(
-                        mels_.unsqueeze(0), vocoder
-                    )  # selecting the last data point to match mel generated above
-                    audio = audio.cpu().float().numpy()
+                    audio = vocoder(mels)
+                    audio = audio.detach().cpu().float().numpy()
                     audio = audio / (
                         audio.max() - audio.min()
                     )  # get values between -1 and 1
+                    audio = audio.reshape(-1,1)
 
                     writer.add_audio(
                         tag="generated_audio_{}".format(ids_[-1]),
@@ -453,11 +452,8 @@ def main(cmd_args):
     logger.info("random seed = %d" % hp.train.seed)
     random.seed(hp.train.seed)
     np.random.seed(hp.train.seed)
-
-    vocoder = torch.hub.load(
-        "seungwonpark/melgan", "melgan"
-    )  # load the vocoder for validation
-
+    vocoder = torch.jit.load('vocgan_jared_first_1871233_2220.pt').cuda()
+    
     if hp.train.GTA:
         create_gta(args, hp, hp_str, logger)
     else:

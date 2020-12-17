@@ -62,7 +62,7 @@ def preprocess(data_path, hp, file):
         dur = torch.from_numpy(np.array(dur))
 
         p, avg, std, p_coef = pitch.forward(input_wav, durations = dur)  # shape in order - (T,) (no of utternace, ), (no of utternace, ), (10, T)
-        print(p.shape, avg.shape, std.shape, p_coef.shape)
+        #print(p.shape, avg.shape, std.shape, p_coef.shape)
 
         wav = torch.from_numpy(wav).unsqueeze(0)
         mel, mag = stft.mel_spectrogram(wav)  # mel [1, 80, T]  mag [1, num_mag, T]
@@ -70,7 +70,7 @@ def preprocess(data_path, hp, file):
         mag = mag.squeeze(0)  # [num_mag, T]
         e = torch.norm(mag, dim=0)  # [T, ]
         e, e_avg, e_std, e_coef = energy.forward(e)
-        print(e.shape, e_avg.shape, e_std.shape, e_coef.shape)
+        #print(e.shape, e_avg.shape, e_std.shape, e_coef.shape)
 
 
         id = os.path.basename(wavpath).split(".")[0]

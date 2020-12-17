@@ -17,11 +17,11 @@ def evaluate(hp, validloader, model):
     l1 = torch.nn.L1Loss()
     model.eval()
     for valid in validloader:
-        x_, input_length_, y_, _, out_length_, ids_, dur_, e_, p_, p_avg_, p_std_, p_cwt_cont_ = valid
+        x_, input_length_, y_, _, out_length_, ids_, dur_, e_, p_, p_avg_, p_std_, p_cwt_cont_, e_avg_, e_std_, e_cwt_cont_  = valid
         
         with torch.no_grad():
             ilens = torch.tensor([x_[-1].shape[0]], dtype=torch.long, device=x_.device)
-            _, after_outs, d_outs, e_outs, p_outs, p_avg_outs, p_std_outs = model._forward(x_.cuda(), ilens.cuda(), out_length_.cuda(), dur_.cuda(), es=e_.cuda(), ps=p_.cuda(), is_inference=False)  # [T, num_mel]
+            _, after_outs, d_outs, e_outs, p_outs, p_avg_outs, p_std_outs, e_avg_outs, e_std_outs  = model._forward(x_.cuda(), ilens.cuda(), out_length_.cuda(), dur_.cuda(), es=e_.cuda(), ps=p_.cuda(), is_inference=False)  # [T, num_mel]
 
             # e_orig = model.energy_predictor.to_one_hot(e_).squeeze()
             # p_orig = model.pitch_predictor.to_one_hot(p_).squeeze()
@@ -29,7 +29,7 @@ def evaluate(hp, validloader, model):
             #print(d_outs)
 
             dur_diff.append(l1(d_outs, dur_.cuda()).item())      #.numpy()
-            energy_diff.append(l1(e_outs, e_.cuda()).item())      #.numpy()
+            energy_diff.append(l1(e_outs, e_cwt_cont_.cuda()).item())      #.numpy()
             pitch_diff.append(l1(p_outs, p_cwt_cont_.cuda()).item())       #.numpy()
 
             

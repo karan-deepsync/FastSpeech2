@@ -78,7 +78,7 @@ g2p = G2p()
 def plot_mel(mels):
     melspec = mels.reshape(1, 80, -1)
     plt.imshow(melspec.detach().cpu()[0], aspect="auto", origin="lower")
-    plt.savefig("mel.png")
+    #plt.savefig("mel.png")
 
 
 def preprocess(text):
@@ -93,6 +93,7 @@ def preprocess(text):
     phonemes = ["" if x == " " else x for x in phonemes]
     phonemes = ["pau" if x == "," else x for x in phonemes]
     phonemes = ["pau" if x == "." else x for x in phonemes]
+    phonemes.append("sil")
     phonemes = str1.join(phonemes)
 
     return phonemes
@@ -126,7 +127,8 @@ def synth(text, model, hp):
     with torch.no_grad():
         print("predicting")
         print(text.shape)
-        outs = model.inference(text)  # model(text) for jit script
+        outs, energy = model.inference(text)  # model(text) for jit script
+        np.save("Energy_2.npy", energy.detach().cpu().numpy())
         mel = outs
     return mel
 

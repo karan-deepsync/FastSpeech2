@@ -62,6 +62,12 @@ class TTSDataset(Dataset):
         p_avg = np.load(f"{self.path}p_avg/{id}.npy")
         p_std = np.load(f"{self.path}p_std/{id}.npy")
         p_cwt_cont = np.load(f"{self.path}p_cwt_coef/{id}.npy")
+
+        e_avg = np.load(f"{self.path}e_avg/{id}.npy")
+        e_std = np.load(f"{self.path}e_std/{id}.npy")
+        e_cwt_cont = np.load(f"{self.path}e_cwt_coef/{id}.npy")
+
+
         mel_len = mel.shape[1]
         durations = durations[: len(x)]
         durations[-1] = durations[-1] + (mel.shape[1] - sum(durations))
@@ -76,7 +82,11 @@ class TTSDataset(Dataset):
             p,
             p_avg,
             p_std,
-            p_cwt_cont
+            p_cwt_cont,
+            e_avg,
+            e_std,
+            e_cwt_cont,
+
         )  # Mel [T, num_mel]
 
     def __len__(self):
@@ -117,6 +127,12 @@ def collate_tts(batch):
     pitches_std = torch.Tensor([torch.from_numpy(x[8]).float() for x in batch]) #pad_list([torch.from_numpy(y[8]).float() for y in batch], 0)
     pitches_contour = pad_list([torch.from_numpy(y[9]).float() for y in batch], 0)
 
+    energy_avg = torch.Tensor([torch.from_numpy(x[10]).float() for x in batch])  #pad_list([torch.from_numpy(y[7]).float() for y in batch], 0)
+    energy_std = torch.Tensor([torch.from_numpy(x[11]).float() for x in batch]) #pad_list([torch.from_numpy(y[8]).float() for y in batch], 0)
+    energy_contour = pad_list([torch.from_numpy(y[12]).float() for y in batch], 0)
+
+
+
     # make labels for stop prediction
     labels = mels.new_zeros(mels.size(0), mels.size(1))
     for i, l in enumerate(olens):
@@ -125,7 +141,7 @@ def collate_tts(batch):
     # scale spectrograms to -4 <--> 4
     # mels = (mels * 8.) - 4
 
-    return inputs, ilens, mels, labels, olens, ids, durations, energys, pitches, pitches_avg, pitches_std, pitches_contour
+    return inputs, ilens, mels, labels, olens, ids, durations, energys, pitches, pitches_avg, pitches_std, pitches_contour, energy_avg, energy_std, energy_contour
 
 
 class BinnedLengthSampler(Sampler):

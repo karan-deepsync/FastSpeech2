@@ -11,7 +11,7 @@ import logging
 import torch
 from core.duration_modeling.duration_predictor import DurationPredictor
 from core.duration_modeling.duration_predictor import DurationPredictorLoss
-from core.variance_predictor import EnergyPredictor, EnergyPredictorLoss
+#from core.variance_predictor import EnergyPredictor, EnergyPredictorLoss
 from core.variance_predictor import PitchPredictor, PitchPredictorLoss
 from core.duration_modeling.length_regulator import LengthRegulator
 from utils.util import make_non_pad_mask
@@ -90,18 +90,6 @@ class FeedForwardTransformer(torch.nn.Module):
             dropout_rate=hp.model.duration_predictor_dropout_rate,
         )
 
-        self.energy_predictor = EnergyPredictor(
-            idim=hp.model.adim,
-            n_layers=hp.model.duration_predictor_layers,
-            n_chans=hp.model.duration_predictor_chans,
-            kernel_size=hp.model.duration_predictor_kernel_size,
-            dropout_rate=hp.model.duration_predictor_dropout_rate,
-            min=hp.data.e_min,
-            max=hp.data.e_max,
-            out = hp.audio.e_cwt_bins
-        )
-        self.energy_embed = torch.nn.Linear(hp.model.adim, hp.model.adim)
-
         self.pitch_predictor = PitchPredictor(
             idim=hp.model.adim,
             n_layers=hp.model.duration_predictor_layers,
@@ -163,7 +151,6 @@ class FeedForwardTransformer(torch.nn.Module):
 
         # define criterions
         self.duration_criterion = DurationPredictorLoss()
-        self.energy_criterion = EnergyPredictorLoss()
         self.pitch_criterion = PitchPredictorLoss()
         self.criterion = torch.nn.L1Loss(reduction="mean")
         self.use_weighted_masking = hp.model.use_weighted_masking
@@ -174,7 +161,6 @@ class FeedForwardTransformer(torch.nn.Module):
         ilens: torch.Tensor,
         olens: torch.Tensor = None,
         ds: torch.Tensor = None,
-        es: torch.Tensor = None,
         ps: torch.Tensor = None,
         is_inference: bool = False,
     ) -> Sequence[torch.Tensor]:
@@ -198,15 +184,11 @@ class FeedForwardTransformer(torch.nn.Module):
             #print(d_outs.sum(dim=1), d_outs.shape)
             #print(hs.shape, "Hs shape before LR")
             hs = self.length_regulator(hs, d_outs, ilens)  # (B, Lmax, adim)
-            one_hot_energy= self.energy_predictor.inference(hs, d_outs.sum(dim=1))  # (B, Lmax, adim)
             one_hot_pitch = self.pitch_predictor.inference(hs, d_outs.sum(dim=1))
             #one_hot_pitch = self.pitch_predictor.inverse(f0, f_mean, f_std)  # (B, Lmax, adim)
         else:
             with torch.no_grad():
                 # ds = self.duration_calculator(xs, ilens, ys, olens)  # (B, Tmax)
-                one_hot_energy = self.energy_predictor.to_one_hot(
-                    es.detach()
-                )  # (B, Lmax, adim)   torch.Size([32, 868, 256])
                 # print("one_hot_energy:", one_hot_energy.shape)
                 one_hot_pitch = self.pitch_predictor.to_one_hot(
                     ps.detach()
@@ -219,12 +201,10 @@ class FeedForwardTransformer(torch.nn.Module):
             hs = self.length_regulator(hs, ds, ilens)  # (B, Lmax, adim)
             # print("After Hs:",hs.shape)  #torch.Size([32, 868, 256])
             mel_masks = make_pad_mask(olens).unsqueeze(-1).to(xs.device)
-            e_outs, e_avg_outs, e_std_outs = self.energy_predictor(hs, olens, mel_masks)
             #print("e_outs:", e_outs.shape, e_avg_outs.shape, e_std_outs.shape)  #torch.Size([32, 868])
             p_outs, p_avg_outs, p_std_outs = self.pitch_predictor(hs, olens, mel_masks)
             #print("p_outs:", p_outs.shape, p_avg_outs.shape, p_std_outs.shape )   #torch.Size([32, 868])
         hs = hs + self.pitch_embed(one_hot_pitch)  # (B, Lmax, adim)
-        hs = hs + self.energy_embed(one_hot_energy)  # (B, Lmax, adim)
         # forward decoder
         if olens is not None:
             h_masks = self._source_mask(olens)
@@ -247,9 +227,9 @@ class FeedForwardTransformer(torch.nn.Module):
 
         #print(e_outs.shape, p_outs.shape, p_avg_outs.shape, p_std_outs.shape, e_avg_outs.shape, e_std_outs.shape)
         if is_inference:
-            return before_outs, after_outs, d_outs, one_hot_energy, one_hot_pitch
+            return before_outs, after_outs, d_outs, one_hot_pitch
         else:
-            return before_outs, after_outs, d_outs, e_outs, p_outs, p_avg_outs, p_std_outs, e_avg_outs, e_std_outs
+            return before_outs, after_outs, d_outs, p_outs, p_avg_outs, p_std_outs
 
     def forward(
         self,
@@ -258,14 +238,10 @@ class FeedForwardTransformer(torch.nn.Module):
         ys: torch.Tensor,
         olens: torch.Tensor,
         ds: torch.Tensor,
-        es: torch.Tensor,
         ps: torch.Tensor,
         ps_spec: torch.Tensor,
         ps_avg: torch.Tensor = None,
-        ps_std: torch.Tensor = None,
-        es_spec: torch.Tensor = None,
-        es_avg: torch.Tensor = None,
-        es_std: torch.Tensor = None
+        ps_std: torch.Tensor = None
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """Calculate forward propagation.
         Args:
@@ -282,8 +258,8 @@ class FeedForwardTransformer(torch.nn.Module):
         ys = ys[:, : max(olens)]  # torch.Size([32, 868, 80]) -> [B, Lmax, odim]
 
         # forward propagation
-        before_outs, after_outs, d_outs, e_outs, p_outs, p_avg_outs, p_std_outs, e_avg_outs, e_std_outs = self._forward(
-            xs, ilens, olens, ds, es, ps, is_inference=False
+        before_outs, after_outs, d_outs, p_outs, p_avg_outs, p_std_outs = self._forward(
+            xs, ilens, olens, ds, ps, is_inference=False
         )
 
         # modifiy mod part of groundtruth
@@ -303,9 +279,7 @@ class FeedForwardTransformer(torch.nn.Module):
             before_outs = before_outs.masked_select(out_masks)
             #es = es.masked_select(mel_masks)  # Write size
             ps_spec = ps_spec.masked_select(out_masks)  # Write size
-            es_spec = es_spec.masked_select(out_masks)
 
-            e_outs = e_outs.masked_select(out_masks)  # Write size
             p_outs = p_outs.masked_select(out_masks)  # Write size
             #p_avg_outs = p_avg_outs.masked_select(mel_masks)  # Write size
             #p_std_outs = p_std_outs.masked_select(mel_masks)  # Write size
@@ -322,9 +296,6 @@ class FeedForwardTransformer(torch.nn.Module):
             l1_loss = before_loss + after_loss
         duration_loss = self.duration_criterion(d_outs, ds)
 
-        energy_loss = self.pitch_criterion(e_outs, es_spec)
-        energy__mean_loss = self.pitch_criterion(e_avg_outs, es_avg)
-        energy_std_loss = self.pitch_criterion(e_std_outs, es_std)
 
         pitch_loss = self.pitch_criterion(p_outs, ps_spec)
         pitch__mean_loss = self.pitch_criterion(p_avg_outs, ps_avg)
@@ -347,19 +318,16 @@ class FeedForwardTransformer(torch.nn.Module):
                 duration_loss.mul(duration_weights).masked_select(duration_masks).sum()
             )
 
-        loss = l1_loss + duration_loss + energy_loss + pitch_loss + pitch__mean_loss + pitch_std_loss + energy__mean_loss + energy_std_loss
+        loss = l1_loss + duration_loss +  pitch_loss + pitch__mean_loss + pitch_std_loss
         report_keys = [
             {"l1_loss": l1_loss.item()},
             {"before_loss": before_loss.item()},
             {"after_loss": after_loss.item()},
             {"duration_loss": duration_loss.item()},
-            {"energy_loss": energy_loss.item()},
             {"pitch_loss": pitch_loss.item()},
             {"pitch__mean_loss": pitch__mean_loss.item()},
             {"pitch_std_loss": pitch_std_loss.item()},
             {"loss": loss.item()},
-            {"energy__mean_loss": pitch__mean_loss.item()},
-            {"energy_std_loss": pitch_std_loss.item()},
         ]
 
         # self.reporter.report(report_keys)
@@ -382,7 +350,7 @@ class FeedForwardTransformer(torch.nn.Module):
         xs = x.unsqueeze(0)
 
         # inference
-        _, outs, _, _, _ = self._forward(xs, ilens, is_inference=True)  # (L, odim)
+        _, outs, _, _ = self._forward(xs, ilens, is_inference=True)  # (L, odim)
 
         return outs[0]
 

@@ -4,7 +4,7 @@ from fastspeech import FeedForwardTransformer
 import sys
 import torch
 from dataset.texts import valid_symbols
-import os 
+import os
 from utils.hparams import HParam, load_hparam_str
 import numpy as np
 
@@ -17,28 +17,27 @@ def evaluate(hp, validloader, model):
     l1 = torch.nn.L1Loss()
     model.eval()
     for valid in validloader:
-        x_, input_length_, y_, _, out_length_, ids_, dur_, e_, p_, p_avg_, p_std_, p_cwt_cont_, e_avg_, e_std_, e_cwt_cont_  = valid
-        
+        x_, input_length_, y_, _, out_length_, ids_, dur_, p_, p_avg_, p_std_, p_cwt_cont_  = valid
+
         with torch.no_grad():
             ilens = torch.tensor([x_[-1].shape[0]], dtype=torch.long, device=x_.device)
-            _, after_outs, d_outs, e_outs, p_outs, p_avg_outs, p_std_outs, e_avg_outs, e_std_outs  = model._forward(x_.cuda(), ilens.cuda(), out_length_.cuda(), dur_.cuda(), es=e_.cuda(), ps=p_.cuda(), is_inference=False)  # [T, num_mel]
+            _, after_outs, d_outs, p_outs, p_avg_outs, p_std_outs  = model._forward(x_.cuda(), ilens.cuda(), out_length_.cuda(), dur_.cuda(), ps=p_.cuda(), is_inference=False)  # [T, num_mel]
 
             # e_orig = model.energy_predictor.to_one_hot(e_).squeeze()
             # p_orig = model.pitch_predictor.to_one_hot(p_).squeeze()
-            
+
             #print(d_outs)
 
             dur_diff.append(l1(d_outs, dur_.cuda()).item())      #.numpy()
-            energy_diff.append(l1(e_outs, e_cwt_cont_.cuda()).item())      #.numpy()
             pitch_diff.append(l1(p_outs, p_cwt_cont_.cuda()).item())       #.numpy()
 
-            
+
         '''_, target = read_wav_np( hp.data.wav_dir + f"{ids_[-1]}.wav", sample_rate=hp.audio.sample_rate)
         target_pitch = np.load(hp.data.data_dir + f"pitch/{ids_[-1]}.wav" )
         target_energy = np.load(hp.data.data_dir + f"energy/{ids_[-1]}.wav" )
         '''
     model.train()
-    return np.mean(pitch_diff), np.mean(energy_diff), np.mean(dur_diff)
+    return np.mean(pitch_diff), np.mean(dur_diff)
 
 
 def get_parser():
@@ -79,11 +78,11 @@ def main(cmd_args):
         hp = HParam(args.config)
     else:
         hp = load_hparam_str(checkpoint["hp_str"])
-    
+
     validloader = loader.get_tts_dataset(hp.data.data_dir, 1, hp, True)
     print("Checkpoint : ", args.checkpoint_path)
 
-    
+
 
     idim = len(valid_symbols)
     odim = hp.audio.num_mels
@@ -95,7 +94,7 @@ def main(cmd_args):
     model.load_state_dict(checkpoint["model"])
 
     evaluate(hp, validloader, model)
-    
+
 
 if __name__ == "__main__":
     main(sys.argv[1:])

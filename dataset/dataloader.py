@@ -53,20 +53,13 @@ class TTSDataset(Dataset):
             x = text_to_sequence(x_, self.tts_cleaner_names, self.eos)
         mel = np.load(f"{self.path}mels/{id}.npy")
         durations = str_to_int_list(self._metadata[index][2])
-        e = remove_outlier(
-            np.load(f"{self.path}energy/{id}.npy")
-        )  # self._norm_mean_std(np.load(f'{self.path}energy/{id}.npy'), self.e_mean, self.e_std, True)
+        # self._norm_mean_std(np.load(f'{self.path}energy/{id}.npy'), self.e_mean, self.e_std, True)
         p = remove_outlier(
             np.load(f"{self.path}pitch/{id}.npy")
         )  # self._norm_mean_std(np.load(f'{self.path}pitch/{id}.npy'), self.f0_mean, self.f0_std, True)
         p_avg = np.load(f"{self.path}p_avg/{id}.npy")
         p_std = np.load(f"{self.path}p_std/{id}.npy")
         p_cwt_cont = np.load(f"{self.path}p_cwt_coef/{id}.npy")
-
-        e_avg = np.load(f"{self.path}e_avg/{id}.npy")
-        e_std = np.load(f"{self.path}e_std/{id}.npy")
-        e_cwt_cont = np.load(f"{self.path}e_cwt_coef/{id}.npy")
-
 
         mel_len = mel.shape[1]
         durations = durations[: len(x)]
@@ -78,15 +71,10 @@ class TTSDataset(Dataset):
             id,
             mel_len,
             np.array(durations),
-            e,
             p,
             p_avg,
             p_std,
             p_cwt_cont,
-            e_avg,
-            e_std,
-            e_cwt_cont,
-
         )  # Mel [T, num_mel]
 
     def __len__(self):
@@ -120,16 +108,11 @@ def collate_tts(batch):
     mels = pad_list([torch.from_numpy(y[1]).float() for y in batch], 0)
 
     durations = pad_list([torch.from_numpy(x[4]).long() for x in batch], 0)
-    energys = pad_list([torch.from_numpy(y[5]).float() for y in batch], 0)
-    pitches = pad_list([torch.from_numpy(y[6]).float() for y in batch], 0)
+    pitches = pad_list([torch.from_numpy(y[5]).float() for y in batch], 0)
 
-    pitches_avg = torch.Tensor([torch.from_numpy(x[7]).float() for x in batch])  #pad_list([torch.from_numpy(y[7]).float() for y in batch], 0)
-    pitches_std = torch.Tensor([torch.from_numpy(x[8]).float() for x in batch]) #pad_list([torch.from_numpy(y[8]).float() for y in batch], 0)
-    pitches_contour = pad_list([torch.from_numpy(y[9]).float() for y in batch], 0)
-
-    energy_avg = torch.Tensor([torch.from_numpy(x[10]).float() for x in batch])  #pad_list([torch.from_numpy(y[7]).float() for y in batch], 0)
-    energy_std = torch.Tensor([torch.from_numpy(x[11]).float() for x in batch]) #pad_list([torch.from_numpy(y[8]).float() for y in batch], 0)
-    energy_contour = pad_list([torch.from_numpy(y[12]).float() for y in batch], 0)
+    pitches_avg = torch.Tensor([torch.from_numpy(x[6]).float() for x in batch])  #pad_list([torch.from_numpy(y[7]).float() for y in batch], 0)
+    pitches_std = torch.Tensor([torch.from_numpy(x[7]).float() for x in batch]) #pad_list([torch.from_numpy(y[8]).float() for y in batch], 0)
+    pitches_contour = pad_list([torch.from_numpy(y[8]).float() for y in batch], 0)
 
 
 
@@ -141,7 +124,7 @@ def collate_tts(batch):
     # scale spectrograms to -4 <--> 4
     # mels = (mels * 8.) - 4
 
-    return inputs, ilens, mels, labels, olens, ids, durations, energys, pitches, pitches_avg, pitches_std, pitches_contour, energy_avg, energy_std, energy_contour
+    return inputs, ilens, mels, labels, olens, ids, durations, pitches, pitches_avg, pitches_std, pitches_contour
 
 
 class BinnedLengthSampler(Sampler):

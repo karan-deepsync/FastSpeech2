@@ -93,7 +93,7 @@ def train(args, hp, hp_str, logger, vocoder):
         pbar = tqdm.tqdm(dataloader, desc="Loading train data")
         for data in pbar:
             global_step += 1
-            x, input_length, y, _, out_length, _, dur, e, p, p_avg, p_std, p_cwt_cont, e_avg, e_std, e_cwt_cont  = data
+            x, input_length, y, _, out_length, _, dur, p, p_avg, p_std, p_cwt_cont  = data
             # x : [batch , num_char], input_length : [batch], y : [batch, T_in, num_mel]
             #             # stop_token : [batch, T_in], out_length : [batch]
 
@@ -103,14 +103,10 @@ def train(args, hp, hp_str, logger, vocoder):
                 y.cuda(),
                 out_length.cuda(),
                 dur.cuda(),
-                e.cuda(),
                 p.cuda(),
                 p_cwt_cont.cuda(),
                 p_avg.cuda(),
                 p_std.cuda(),
-                e_cwt_cont.cuda(),
-                e_avg.cuda(),
-                e_std.cuda()
             )
             loss = loss.mean() / hp.train.accum_grad
             running_loss += loss.item()
@@ -154,7 +150,7 @@ def train(args, hp, hp_str, logger, vocoder):
             if step % hp.train.validation_step == 0:
 
                 for valid in validloader:
-                    x_, input_length_, y_, _, out_length_, ids_, dur_, e_, p_, p_avg_, p_std_, p_cwt_cont_, e_avg_, e_std_, e_cwt_cont_  = valid
+                    x_, input_length_, y_, _, out_length_, ids_, dur_, p_, p_avg_, p_std_, p_cwt_cont_  = valid
                     model.eval()
                     with torch.no_grad():
                         loss_, report_dict_ = model(
@@ -163,14 +159,10 @@ def train(args, hp, hp_str, logger, vocoder):
                             y_.cuda(),
                             out_length_.cuda(),
                             dur_.cuda(),
-                            e_.cuda(),
                             p_.cuda(),
                             p_cwt_cont_.cuda(),
                             p_avg_.cuda(),
                             p_std_.cuda(),
-                            e_cwt_cont_.cuda(),
-                            e_avg_.cuda(),
-                            e_std_.cuda(),
                         )
 
                         mels_ = model.inference(x_[-1].cuda())  # [T, num_mel]
@@ -201,6 +193,9 @@ def train(args, hp, hp_str, logger, vocoder):
                         dataformats="HWC",
                     )
 
+                    mels = mels_.unsqueeze(0)
+                    zero = torch.full((1, 80, 10), -11.5129).to(mels.device)
+                    mels = torch.cat((mels, zero), dim=2)
 
                     audio = vocoder(mels)
                     audio = audio.detach().cpu().float().numpy()
@@ -230,9 +225,8 @@ def train(args, hp, hp_str, logger, vocoder):
 
 
             if step % hp.train.save_interval == 0:
-                avg_p, avg_e, avg_d = evaluate(hp, validloader, model)
+                avg_p, avg_d = evaluate(hp, validloader, model)
                 writer.add_scalar("evaluation/Pitch_Loss", avg_p, step)
-                writer.add_scalar("evaluation/Energy_Loss", avg_e, step)
                 writer.add_scalar("evaluation/Dur_Loss", avg_d, step)
                 save_path = os.path.join(
                     hp.train.chkpt_dir,
@@ -453,7 +447,7 @@ def main(cmd_args):
     random.seed(hp.train.seed)
     np.random.seed(hp.train.seed)
     vocoder = torch.jit.load('vocgan_jared_first_1871233_2220.pt').cuda()
-    
+
     if hp.train.GTA:
         create_gta(args, hp, hp_str, logger)
     else:
